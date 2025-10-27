@@ -1,0 +1,21 @@
+{
+  "tests": [
+    {
+      "name": "Get all sounds",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 200
+    },
+    {
+      "name": "Add new sound",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "name": "Test Sound",
+        "emoji": "🎵",
+        "audio_url": "https://example.com/test.mp3"
+      },
+      "expectedStatus": 201
+    }
+  ]
+}

@@ -1,48 +1,136 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import Icon from '@/components/ui/icon';
+import { useToast } from '@/hooks/use-toast';
 
 interface SoundButton {
   id: number;
   name: string;
   emoji: string;
   plays: number;
-  audioUrl: string;
+  audio_url: string;
 }
+
+const API_URL = 'https://functions.poehali.dev/c25272e6-43c9-4c6e-836e-b533dbeeae57';
 
 const Index = () => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [sounds, setSounds] = useState<SoundButton[]>([
-    { id: 1, name: '1 Billion IQ', emoji: '🧠', plays: 42069, audioUrl: 'https://www.myinstants.com/media/sounds/1-000-000-000-iq.mp3' },
-    { id: 2, name: 'Bruh', emoji: '😑', plays: 98765, audioUrl: 'https://www.myinstants.com/media/sounds/movie_1.mp3' },
-    { id: 3, name: 'Wow', emoji: '😮', plays: 54321, audioUrl: 'https://www.myinstants.com/media/sounds/wow.mp3' },
-    { id: 4, name: 'Error', emoji: '❌', plays: 33333, audioUrl: 'https://www.myinstants.com/media/sounds/error.mp3' },
-    { id: 5, name: 'Victory', emoji: '🎉', plays: 77777, audioUrl: 'https://www.myinstants.com/media/sounds/victory.mp3' },
-    { id: 6, name: 'Applause', emoji: '👏', plays: 66666, audioUrl: 'https://www.myinstants.com/media/sounds/applause.mp3' },
-    { id: 7, name: 'Laugh', emoji: '😂', plays: 88888, audioUrl: 'https://www.myinstants.com/media/sounds/laugh.mp3' },
-    { id: 8, name: 'Airhorn', emoji: '📯', plays: 12345, audioUrl: 'https://www.myinstants.com/media/sounds/air-horn.mp3' },
-  ]);
-
+  const [sounds, setSounds] = useState<SoundButton[]>([]);
   const [playingId, setPlayingId] = useState<number | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
-  const playSound = (sound: SoundButton) => {
-    const audio = new Audio(sound.audioUrl);
+  const [newSound, setNewSound] = useState({
+    name: '',
+    emoji: '🔊',
+    audio_url: ''
+  });
+
+  useEffect(() => {
+    fetchSounds();
+  }, []);
+
+  const fetchSounds = async () => {
+    try {
+      const response = await fetch(API_URL);
+      const data = await response.json();
+      setSounds(data);
+    } catch (error) {
+      console.error('Failed to fetch sounds:', error);
+      toast({
+        title: 'Ошибка',
+        description: 'Не удалось загрузить звуки',
+        variant: 'destructive'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const playSound = async (sound: SoundButton) => {
+    const audio = new Audio(sound.audio_url);
     audio.play().catch(() => {
-      console.log('Audio playback failed');
+      toast({
+        title: 'Ошибка',
+        description: 'Не удалось воспроизвести звук',
+        variant: 'destructive'
+      });
     });
     
     setPlayingId(sound.id);
     setTimeout(() => setPlayingId(null), 300);
     
-    setSounds(sounds.map(s => 
-      s.id === sound.id ? { ...s, plays: s.plays + 1 } : s
-    ));
+    try {
+      await fetch(API_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: sound.id })
+      });
+      
+      setSounds(sounds.map(s => 
+        s.id === sound.id ? { ...s, plays: s.plays + 1 } : s
+      ));
+    } catch (error) {
+      console.error('Failed to update play count:', error);
+    }
+  };
+
+  const addSound = async () => {
+    if (!newSound.name || !newSound.audio_url) {
+      toast({
+        title: 'Ошибка',
+        description: 'Заполните название и ссылку на аудио',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newSound)
+      });
+
+      if (response.ok) {
+        const addedSound = await response.json();
+        setSounds([...sounds, addedSound]);
+        setNewSound({ name: '', emoji: '🔊', audio_url: '' });
+        setIsDialogOpen(false);
+        toast({
+          title: 'Успешно',
+          description: 'Звук добавлен!'
+        });
+      }
+    } catch (error) {
+      console.error('Failed to add sound:', error);
+      toast({
+        title: 'Ошибка',
+        description: 'Не удалось добавить звук',
+        variant: 'destructive'
+      });
+    }
   };
 
   const filteredSounds = sounds.filter(sound =>
     sound.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin text-6xl mb-4">🔊</div>
+          <p className="text-muted-foreground">Загрузка...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -56,8 +144,8 @@ const Index = () => {
           </p>
         </div>
 
-        <div className="mb-8 max-w-md mx-auto animate-scale-in">
-          <div className="relative">
+        <div className="mb-8 max-w-md mx-auto flex gap-2 animate-scale-in">
+          <div className="relative flex-1">
             <Icon 
               name="Search" 
               className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" 
@@ -71,6 +159,56 @@ const Index = () => {
               className="pl-10 h-12 text-lg bg-card border-border"
             />
           </div>
+
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="h-12 px-6" size="lg">
+                <Icon name="Plus" size={20} className="mr-2" />
+                Добавить
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="bg-card">
+              <DialogHeader>
+                <DialogTitle>Добавить новый звук</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 mt-4">
+                <div>
+                  <Label htmlFor="name">Название</Label>
+                  <Input
+                    id="name"
+                    value={newSound.name}
+                    onChange={(e) => setNewSound({ ...newSound, name: e.target.value })}
+                    placeholder="Например: Wow"
+                    className="mt-1 bg-background"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="emoji">Эмодзи</Label>
+                  <Input
+                    id="emoji"
+                    value={newSound.emoji}
+                    onChange={(e) => setNewSound({ ...newSound, emoji: e.target.value })}
+                    placeholder="🔊"
+                    className="mt-1 bg-background"
+                    maxLength={2}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="audio_url">Ссылка на аудио</Label>
+                  <Input
+                    id="audio_url"
+                    value={newSound.audio_url}
+                    onChange={(e) => setNewSound({ ...newSound, audio_url: e.target.value })}
+                    placeholder="https://example.com/sound.mp3"
+                    className="mt-1 bg-background"
+                  />
+                </div>
+                <Button onClick={addSound} className="w-full">
+                  Добавить звук
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
